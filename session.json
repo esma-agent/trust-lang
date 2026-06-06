@@ -1,0 +1,72 @@
+{
+  "discovery": {
+    "issues_ranked": [
+      {
+        "id": "CRIT-001",
+        "title": "Relative include path from msgpack-c breaks cmake configuration",
+        "category": "build",
+        "score": 9,
+        "weight": 3.0,
+        "effort": 1.0,
+        "priority": 27.0,
+        "file": "cmake/dependencies.cmake",
+        "description": "pkg-config returns relative path 'include' for MSGPACK_INCLUDE_DIRS, which propagates through PUBLIC link chains, causing CMake errors about relative INTERFACE_INCLUDE_DIRECTORIES on every target."
+      },
+      {
+        "id": "CRIT-002",
+        "title": "#embed directive not supported by available compilers",
+        "category": "correctness",
+        "score": 8,
+        "weight": 3.0,
+        "effort": 1.5,
+        "priority": 16.0,
+        "file": "src/parser/mmproc.cpp",
+        "description": "Uses C++23 #embed directive which is not supported by GCC 14 or Clang 17 (the available compilers)."
+      },
+      {
+        "id": "CRIT-003",
+        "title": "C++20 modules use clang-specific --precompile flag",
+        "category": "build",
+        "score": 7,
+        "weight": 3.0,
+        "effort": 1.5,
+        "priority": 14.0,
+        "file": "include/trust/CMakeLists.txt, include/runtime/CMakeLists.txt",
+        "description": "Module compilation uses --precompile which is clang-specific. GCC uses -fmodules-ts with a different workflow."
+      },
+      {
+        "id": "DEBT-001",
+        "title": "libstdc++ 14 + clang 17 incompatibility with unordered_map operations",
+        "category": "debt",
+        "score": 6,
+        "weight": 2.0,
+        "effort": 1.0,
+        "priority": 12.0,
+        "file": "src/ast/attr_pool.cpp",
+        "description": "operator[] and try_emplace on std::unordered_map fail with clang 17 + libstdc++ 14 due to std::get template resolution failure."
+      }
+    ],
+    "completed": ["CRIT-001", "CRIT-002", "CRIT-003", "DEBT-001"],
+    "deferred": [],
+    "selected_this_session": "CRIT-001"
+  },
+  "summary": {
+    "files_changed": [
+      "CMakeLists.txt",
+      "cmake/dependencies.cmake",
+      "cmake/generate_files.cmake",
+      "include/parser/CMakeLists.txt",
+      "include/runtime/CMakeLists.txt",
+      "include/trust/CMakeLists.txt",
+      "src/ast/attr_pool.cpp",
+      "src/parser/mmproc.cpp",
+      ".gitignore"
+    ],
+    "total_insertions": 205,
+    "total_deletions": 83,
+    "tests_passed": 822,
+    "tests_failed": 2,
+    "tests_disabled": 10,
+    "notes": "2 test failures are pre-existing (SmtPrinterTest output path issue, not related to this refactoring)."
+  }
+}

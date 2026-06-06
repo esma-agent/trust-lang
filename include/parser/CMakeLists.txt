@@ -62,6 +62,6 @@ set_source_files_properties(
     ${PROJECT_SOURCE_DIR}/parser/mmproc.cpp
     ${GEN_DIR}/lex.yy.cpp
     ${GEN_DIR}/parser.tab.cpp
-    PROPERTIES COMPILE_OPTIONS "-Wno-old-style-cast;-Wno-c23-extensions"
+    PROPERTIES COMPILE_OPTIONS "-Wno-old-style-cast"
 )
-add_dependencies(parser_lib parser_generated ast_generated)
+add_dependencies(parser_lib parser_generated ast_generated generate_dsl_embed)

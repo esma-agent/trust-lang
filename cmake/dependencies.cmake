@@ -20,6 +20,17 @@ find_package(CLI11 REQUIRED)
 
 # ── msgpack-c (для бинарного source mapping) — статическая линковка ──
 pkg_check_modules(MSGPACK REQUIRED msgpack-c)
+
+# pkg-config may return relative paths (e.g. "include").
+# Convert to absolute to avoid CMake errors about relative INTERFACE_INCLUDE_DIRECTORIES.
+set(_msgpack_abs_include_dirs "")
+foreach(_dir ${MSGPACK_INCLUDE_DIRS})
+    if(NOT IS_ABSOLUTE "${_dir}")
+        set(_dir "${CMAKE_SOURCE_DIR}/${_dir}")
+    endif()
+    list(APPEND _msgpack_abs_include_dirs "${_dir}")
+endforeach()
+
 find_library(MSGPACK_STATIC_LIB
     NAMES libmsgpack-c.a msgpack-c.a
     HINTS ${MSGPACK_LIBRARY_DIRS} /usr/local/lib /usr/lib
@@ -32,18 +43,19 @@ message(STATUS "msgpack-c static lib: ${MSGPACK_STATIC_LIB}")
 add_library(msgpack-c-static STATIC IMPORTED)
 set_target_properties(msgpack-c-static PROPERTIES
     IMPORTED_LOCATION "${MSGPACK_STATIC_LIB}"
-    INTERFACE_INCLUDE_DIRECTORIES "${MSGPACK_INCLUDE_DIRS}"
-    INTERFACE_SYSTEM_INCLUDE_DIRECTORIES "${MSGPACK_INCLUDE_DIRS}"
+    INTERFACE_INCLUDE_DIRECTORIES "${_msgpack_abs_include_dirs}"
+    INTERFACE_SYSTEM_INCLUDE_DIRECTORIES "${_msgpack_abs_include_dirs}"
 )
+unset(_msgpack_abs_include_dirs)
 
 # ── LLVM/Clang (for stdlib) ──
-list(APPEND CMAKE_PREFIX_PATH "/usr/lib/llvm-22/lib/cmake")
+list(APPEND CMAKE_PREFIX_PATH "/usr/lib/llvm-17/lib/cmake")
 find_package(LLVM REQUIRED CONFIG)
 find_package(Clang REQUIRED CONFIG)
 
-# ── LLDB (for debug) — версия из CLANG_VERSION ──
-set(LLDB_INCLUDE_DIRS "/usr/lib/llvm-${CLANG_VERSION}/include")
-set(LLDB_LIBRARIES "/usr/lib/llvm-${CLANG_VERSION}/lib/liblldb.so")
+# ── LLDB (for debug) — версия 17 ──
+set(LLDB_INCLUDE_DIRS "/usr/lib/llvm-17/include")
+set(LLDB_LIBRARIES "/usr/lib/llvm-17/lib/liblldb.so")
 
 # ── GMP interface target ──
 add_library(gmp_interface INTERFACE)

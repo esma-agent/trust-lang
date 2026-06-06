@@ -100,9 +100,9 @@
 cmake_minimum_required(VERSION 3.28)
 
 # ── Compilers ──
-set(CLANG_VERSION 22)
-set(CMAKE_C_COMPILER clang-${CLANG_VERSION} CACHE FILEPATH "" FORCE)
-set(CMAKE_CXX_COMPILER clang++-${CLANG_VERSION} CACHE FILEPATH "" FORCE)
+# Use GCC 14 (libstdc++ from GCC 14 has compatibility issues with clang 17)
+set(CMAKE_C_COMPILER gcc CACHE FILEPATH "" FORCE)
+set(CMAKE_CXX_COMPILER g++ CACHE FILEPATH "" FORCE)
 
 project(trust-lang LANGUAGES C CXX)
 

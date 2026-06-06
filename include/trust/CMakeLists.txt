@@ -42,45 +42,80 @@ set(TRUST_COMPILE_OPTIONS
     -I${CMAKE_BINARY_DIR}/include
 )
 
-# Step 1: Precompile module to PCM
-add_custom_command(
-    OUTPUT "${TRUST_PCM}"
-    COMMAND ${CMAKE_CXX_COMPILER} ${TRUST_COMPILE_OPTIONS}
-            -x c++-module --precompile
-            ${TRUST_CPPM}
-            -o ${TRUST_PCM}
-    DEPENDS ${TRUST_CPPM} ${TRUST_MODULE_HEADERS} ${TRUST_MODULE_GENERATED_HEADERS} ${TRUST_PARSER_GEN_OUTPUTS} parser_generated
-    COMMENT "Precompiling C++${CMAKE_CXX_STANDARD} module -> ${TRUST_PCM}"
-    VERBATIM
-)
+# Detect compiler family
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    set(TRUST_IS_CLANG TRUE)
+else()
+    set(TRUST_IS_CLANG FALSE)
+endif()
 
-# Step 2: Compile PCM to object file for linking
-add_custom_command(
-    OUTPUT "${TRUST_PCM_OBJ}"
-    COMMAND ${CMAKE_CXX_COMPILER} ${TRUST_COMPILE_OPTIONS}
+if(TRUST_IS_CLANG)
+    # ── Clang: two-step (PCM → .o) ──
+    # Step 1: Precompile module to PCM
+    add_custom_command(
+        OUTPUT "${TRUST_PCM}"
+        COMMAND ${CMAKE_CXX_COMPILER} ${TRUST_COMPILE_OPTIONS}
+                -x c++-module --precompile
+                ${TRUST_CPPM}
+                -o ${TRUST_PCM}
+        DEPENDS ${TRUST_CPPM} ${TRUST_MODULE_HEADERS} ${TRUST_MODULE_GENERATED_HEADERS} ${TRUST_PARSER_GEN_OUTPUTS} parser_generated
+        COMMENT "[Clang] Precompiling module -> ${TRUST_PCM}"
+        VERBATIM
+    )
+
+    # Step 2: Compile PCM to object file for linking
+    add_custom_command(
+        OUTPUT "${TRUST_PCM_OBJ}"
+        COMMAND ${CMAKE_CXX_COMPILER} ${TRUST_COMPILE_OPTIONS}
+                -fmodule-file=trust=${TRUST_PCM}
+                -x c++-module
+                ${TRUST_CPPM}
+                -c -o ${TRUST_PCM_OBJ}
+        DEPENDS ${TRUST_PCM} ${TRUST_CPPM}
+        COMMENT "[Clang] Compiling module PCM -> ${TRUST_PCM_OBJ}"
+        VERBATIM
+    )
+
+    # ── Function to attach trust module to a target (Clang) ──
+    function(target_trust_module target)
+        add_dependencies(${target} trust_pcm_target_all)
+        target_sources(${target} PRIVATE ${TRUST_PCM_OBJ})
+        set_source_files_properties(${TRUST_PCM_OBJ} PROPERTIES
+            EXTERNAL_OBJECT true
+            GENERATED true
+        )
+        target_compile_options(${target} PRIVATE
             -fmodule-file=trust=${TRUST_PCM}
-            -x c++-module
-            ${TRUST_CPPM}
-            -c -o ${TRUST_PCM_OBJ}
-    DEPENDS ${TRUST_PCM} ${TRUST_CPPM}
-    COMMENT "Compiling module PCM to object file -> ${TRUST_PCM_OBJ}"
-    VERBATIM
-)
+        )
+    endfunction()
+else()
+    # ── GCC: single-step compilation with -fmodules-ts ──
+    # GCC generates both the .o file and CMI (gcm.cache/) in a single step.
+    set(TRUST_MODULE_FLAGS "-fmodules-ts")
+    add_custom_command(
+        OUTPUT "${TRUST_PCM_OBJ}"
+        COMMAND ${CMAKE_CXX_COMPILER} ${TRUST_COMPILE_OPTIONS}
+                ${TRUST_MODULE_FLAGS}
+                -c ${TRUST_CPPM}
+                -o ${TRUST_PCM_OBJ}
+        DEPENDS ${TRUST_CPPM} ${TRUST_MODULE_HEADERS} ${TRUST_MODULE_GENERATED_HEADERS} ${TRUST_PARSER_GEN_OUTPUTS} parser_generated
+        COMMENT "[GCC] Compiling module -> ${TRUST_PCM_OBJ}"
+        VERBATIM
+    )
+
+    # ── Function to attach trust module to a target (GCC) ──
+    function(target_trust_module target)
+        add_dependencies(${target} trust_pcm_target_all)
+        target_sources(${target} PRIVATE ${TRUST_PCM_OBJ})
+        set_source_files_properties(${TRUST_PCM_OBJ} PROPERTIES
+            EXTERNAL_OBJECT true
+            GENERATED true
+        )
+        target_compile_options(${target} PRIVATE
+            ${TRUST_MODULE_FLAGS}
+        )
+    endfunction()
+endif()
 
 add_custom_target(trust_pcm_target_all ALL DEPENDS ${TRUST_PCM_OBJ})
 add_dependencies(trust_pcm_target_all parser_lib)
-
-# ── Function to attach trust module to a target ──
-function(target_trust_module target)
-    set(_trust_pcm_path "${CMAKE_BINARY_DIR}/include/trust/trust.pcm")
-    set(_trust_pcm_obj "${CMAKE_BINARY_DIR}/include/trust/trust_module.o")
-    add_dependencies(${target} trust_pcm_target_all)
-    target_sources(${target} PRIVATE ${_trust_pcm_obj})
-    set_source_files_properties(${_trust_pcm_obj} PROPERTIES
-        EXTERNAL_OBJECT true
-        GENERATED true
-    )
-    target_compile_options(${target} PRIVATE
-        -fmodule-file=trust=${_trust_pcm_path}
-    )
-endfunction()

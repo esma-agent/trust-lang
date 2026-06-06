@@ -22,30 +22,53 @@ set(RUNTIME_COMPILE_OPTIONS
     -I${_gmp_includes}
 )
 
-# Step 1: Precompile module to PCM
-add_custom_command(
-    OUTPUT "${RUNTIME_PCM}"
-    COMMAND ${CMAKE_CXX_COMPILER} ${RUNTIME_COMPILE_OPTIONS}
-            -x c++-module --precompile
-            ${RUNTIME_CPPM}
-            -o ${RUNTIME_PCM}
-    DEPENDS ${RUNTIME_CPPM} ${RUNTIME_MODULE_HEADERS}
-    COMMENT "Precompiling C++${CMAKE_CXX_STANDARD} runtime module -> ${RUNTIME_PCM}"
-    VERBATIM
-)
+# Detect compiler family (set by trust module build)
+if(NOT DEFINED TRUST_IS_CLANG)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        set(TRUST_IS_CLANG TRUE)
+    else()
+        set(TRUST_IS_CLANG FALSE)
+    endif()
+endif()
 
-# Step 2: Compile PCM to object file for linking
-add_custom_command(
-    OUTPUT "${RUNTIME_PCM_OBJ}"
-    COMMAND ${CMAKE_CXX_COMPILER} ${RUNTIME_COMPILE_OPTIONS}
-            -fmodule-file=trust.runtime=${RUNTIME_PCM}
-            -x c++-module
-            ${RUNTIME_CPPM}
-            -c -o ${RUNTIME_PCM_OBJ}
-    DEPENDS ${RUNTIME_PCM} ${RUNTIME_CPPM}
-    COMMENT "Compiling runtime module PCM to object file -> ${RUNTIME_PCM_OBJ}"
-    VERBATIM
-)
+if(TRUST_IS_CLANG)
+    # Step 1: Precompile module to PCM (Clang)
+    add_custom_command(
+        OUTPUT "${RUNTIME_PCM}"
+        COMMAND ${CMAKE_CXX_COMPILER} ${RUNTIME_COMPILE_OPTIONS}
+                -x c++-module --precompile
+                ${RUNTIME_CPPM}
+                -o ${RUNTIME_PCM}
+        DEPENDS ${RUNTIME_CPPM} ${RUNTIME_MODULE_HEADERS}
+        COMMENT "[Clang] Precompiling runtime module -> ${RUNTIME_PCM}"
+        VERBATIM
+    )
+
+    # Step 2: Compile PCM to object file for linking (Clang)
+    add_custom_command(
+        OUTPUT "${RUNTIME_PCM_OBJ}"
+        COMMAND ${CMAKE_CXX_COMPILER} ${RUNTIME_COMPILE_OPTIONS}
+                -fmodule-file=trust.runtime=${RUNTIME_PCM}
+                -x c++-module
+                ${RUNTIME_CPPM}
+                -c -o ${RUNTIME_PCM_OBJ}
+        DEPENDS ${RUNTIME_PCM} ${RUNTIME_CPPM}
+        COMMENT "[Clang] Compiling runtime module PCM -> ${RUNTIME_PCM_OBJ}"
+        VERBATIM
+    )
+else()
+    # Single-step compilation with -fmodules-ts (GCC)
+    add_custom_command(
+        OUTPUT "${RUNTIME_PCM_OBJ}"
+        COMMAND ${CMAKE_CXX_COMPILER} ${RUNTIME_COMPILE_OPTIONS}
+                -fmodules-ts
+                -c ${RUNTIME_CPPM}
+                -o ${RUNTIME_PCM_OBJ}
+        DEPENDS ${RUNTIME_CPPM} ${RUNTIME_MODULE_HEADERS}
+        COMMENT "[GCC] Compiling runtime module -> ${RUNTIME_PCM_OBJ}"
+        VERBATIM
+    )
+endif()
 
 add_custom_target(runtime_pcm_target_all ALL DEPENDS ${RUNTIME_PCM_OBJ})
 
@@ -95,7 +118,6 @@ endif()
 
 # ── Function to attach runtime module to a target ──
 function(target_runtime_module target)
-    set(_runtime_pcm_path "${CMAKE_CURRENT_BINARY_DIR}/trust.runtime.pcm")
     set(_runtime_pcm_obj "${CMAKE_CURRENT_BINARY_DIR}/trust.runtime_module.o")
     add_dependencies(${target} runtime_pcm_target_all)
     target_sources(${target} PRIVATE ${_runtime_pcm_obj})
@@ -103,7 +125,14 @@ function(target_runtime_module target)
         EXTERNAL_OBJECT true
         GENERATED true
     )
-    target_compile_options(${target} PRIVATE
-        -fmodule-file=trust.runtime=${_runtime_pcm_path}
-    )
+    if(TRUST_IS_CLANG)
+        set(_runtime_pcm_path "${CMAKE_CURRENT_BINARY_DIR}/trust.runtime.pcm")
+        target_compile_options(${target} PRIVATE
+            -fmodule-file=trust.runtime=${_runtime_pcm_path}
+        )
+    else()
+        target_compile_options(${target} PRIVATE
+            -fmodules-ts
+        )
+    endif()
 endfunction()

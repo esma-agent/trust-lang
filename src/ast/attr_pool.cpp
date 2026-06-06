@@ -184,7 +184,15 @@ AttrId AttrPool::register_attr_impl(std::string_view name, std::vector<AttrParam
     m_attrs.push_back(std::move(attr));
     AttrId new_id = m_attrs.back().m_id;
     // interned_name is already a stable string_view into m_strings, safe to use as key
-    m_name_to_id[interned_name] = new_id;
+    // Use find/insert with pair instead of operator[] (workaround for libstdc++ 14 + clang incompatibility)
+    {
+        auto found = m_name_to_id.find(interned_name);
+        if (found != m_name_to_id.end()) {
+            found->second = new_id;
+        } else {
+            m_name_to_id.insert(std::make_pair(interned_name, new_id));
+        }
+    }
 
     // Record builtin ID if this is a built-in attribute
     if (kind != BuiltinAttrKind::kNone) {
@@ -537,9 +545,10 @@ auto AttrPool::export_attrs(std::span<TokenInfo*> tokens) -> std::unique_ptr<Mod
 
         // Register each singleton in the new ModuleApi (deduplicating via old_to_new)
         for (auto old_id : resolved_singletons) {
-            auto [it, inserted] = old_to_new.try_emplace(old_id, AttrId{0});
-            if (!inserted)
+            // Use count/insert instead of try_emplace (workaround for libstdc++ 14 + clang incompatibility)
+            if (old_to_new.count(old_id) != 0)
                 continue; // already registered
+            auto it = old_to_new.insert(std::make_pair(old_id, AttrId{0})).first;
 
             const Attr& attr = get(old_id); // `this` is the source pool
 
@@ -558,7 +567,7 @@ auto AttrPool::export_attrs(std::span<TokenInfo*> tokens) -> std::unique_ptr<Mod
 
             // Register name → id lookup
             std::string_view interned_name = result->intern(attr.m_name);
-            result->m_name_to_id[interned_name] = new_id;
+            result->m_name_to_id.insert(std::make_pair(interned_name, new_id));
 
             it->second = new_id;
         }
@@ -952,7 +961,7 @@ std::unique_ptr<ModuleApi> ModuleApi::unpackFromMsgpackObject(const msgpack_obje
             // Intern name и заполняем m_name_to_id
             std::string_view attr_name(result->m_name_data.data() + name_pn.offset(), name_pn.length());
             std::string_view interned = result->intern(attr_name);
-            result->m_name_to_id[interned] = new_id;
+            result->m_name_to_id.insert(std::make_pair(interned, new_id));
         }
     }
 
